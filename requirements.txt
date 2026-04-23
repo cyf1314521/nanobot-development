@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+langgraph
+langchain-core
+pydantic
+opentelemetry-api
+opentelemetry-sdk
+chromadb
+pytest
+httpx
