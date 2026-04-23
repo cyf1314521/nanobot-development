@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Eval Dashboard</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; background: #0f172a; color: #e2e8f0; }
+      h1 { margin: 0 0 16px; }
+      .cards { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+      .card { background: #1e293b; border-radius: 10px; padding: 14px; }
+      .label { font-size: 12px; color: #94a3b8; }
+      .value { font-size: 24px; margin-top: 6px; font-weight: bold; }
+      table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 10px; overflow: hidden; }
+      th, td { padding: 10px; border-bottom: 1px solid #334155; text-align: left; font-size: 14px; }
+      th { color: #94a3b8; }
+      .ok { color: #22c55e; }
+      .fail { color: #ef4444; }
+      .muted { color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <h1>Agent Eval Dashboard</h1>
+    <div class="cards">
+      <div class="card"><div class="label">Total Tasks</div><div id="total_tasks" class="value">-</div></div>
+      <div class="card"><div class="label">Success Rate</div><div id="success_rate" class="value">-</div></div>
+      <div class="card"><div class="label">Test Pass Rate</div><div id="test_pass_rate" class="value">-</div></div>
+      <div class="card"><div class="label">Avg Latency (ms)</div><div id="avg_latency_ms" class="value">-</div></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Task ID</th>
+          <th>Status</th>
+          <th>Success</th>
+          <th>Test Passed</th>
+          <th>Latency (ms)</th>
+          <th>Errors</th>
+        </tr>
+      </thead>
+      <tbody id="result_rows">
+        <tr><td colspan="6" class="muted">Loading...</td></tr>
+      </tbody>
+    </table>
+
+    <h1 style="margin-top: 24px;">Latest Run Timeline</h1>
+    <table>
+      <thead>
+        <tr>
+          <th>Node</th>
+          <th>Latency (ms)</th>
+          <th>Input Summary</th>
+          <th>Output Summary</th>
+          <th>New Errors</th>
+        </tr>
+      </thead>
+      <tbody id="trace_rows">
+        <tr><td colspan="5" class="muted">Loading...</td></tr>
+      </tbody>
+    </table>
+
+    <script>
+      function pct(v) { return `${(Number(v || 0) * 100).toFixed(1)}%`; }
+      function boolBadge(v) { return `<span class="${v ? "ok" : "fail"}">${v ? "Yes" : "No"}</span>`; }
+
+      async function loadData() {
+        const resp = await fetch("/dashboard/eval/latest");
+        const data = await resp.json();
+        const s = data.summary || {};
+        document.getElementById("total_tasks").textContent = s.total_tasks ?? 0;
+        document.getElementById("success_rate").textContent = pct(s.success_rate);
+        document.getElementById("test_pass_rate").textContent = pct(s.test_pass_rate);
+        document.getElementById("avg_latency_ms").textContent = Number(s.avg_latency_ms || 0).toFixed(2);
+
+        const rows = (data.results || []).map(r => `
+          <tr>
+            <td>${r.task_id}</td>
+            <td>${r.status_code}</td>
+            <td>${boolBadge(r.success)}</td>
+            <td>${boolBadge(r.test_passed)}</td>
+            <td>${Number(r.elapsed_ms || 0).toFixed(2)}</td>
+            <td class="muted">${(r.errors || []).join("; ") || "-"}</td>
+          </tr>
+        `).join("");
+        document.getElementById("result_rows").innerHTML = rows || `<tr><td colspan="6" class="muted">No eval data yet.</td></tr>`;
+
+        const runResp = await fetch("/dashboard/run/latest");
+        const runData = await runResp.json();
+        const traces = runData.traces || [];
+        const traceRows = traces.map(t => `
+          <tr>
+            <td>${t.node || "-"}</td>
+            <td>${Number(t.latency_ms || 0).toFixed(2)}</td>
+            <td class="muted">${JSON.stringify(t.input_summary || {})}</td>
+            <td class="muted">${JSON.stringify(t.output_summary || {})}</td>
+            <td class="muted">${(t.new_errors || []).join("; ") || "-"}</td>
+          </tr>
+        `).join("");
+        document.getElementById("trace_rows").innerHTML = traceRows || `<tr><td colspan="5" class="muted">No run traces yet. Call /run once.</td></tr>`;
+      }
+
+      loadData();
+    </script>
+  </body>
+</html>

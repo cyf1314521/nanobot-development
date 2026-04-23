@@ -1,0 +1,16 @@
+tasks:
+  - task_id: bench-001
+    requirement: Add health endpoint and add one API test
+    test_command: python -m pytest -q
+  - task_id: bench-002
+    requirement: Improve health endpoint description and keep compatibility
+    test_command: python -m pytest -q
+  - task_id: bench-003
+    requirement: Propose refactor plan for run workflow without behavior changes
+    test_command: python -m pytest -q
+  - task_id: bench-004
+    requirement: Add clear PR summary for current API behavior
+    test_command: python -m pytest -q
+  - task_id: bench-005
+    requirement: apply_demo_patch and ensure tests still run
+    test_command: python -m pytest -q

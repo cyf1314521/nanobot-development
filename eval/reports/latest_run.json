@@ -1,0 +1,139 @@
+{
+  "task_id": "demo-llm-ok",
+  "requirement": "Add health endpoint and add one API test",
+  "context": [
+    "[app/main.py]\nfrom fastapi import FastAPI\nfrom fastapi.encoders import jsonable_encoder\nfrom pydantic import BaseModel\nfrom pathlib import Path\nimport json\n\nfrom app.dashboard.router import router as dashboard_router\nfrom app.graph.workflow import build_workflow\nfrom app.schemas.state import TaskState\n\n# FastAPI 应用入口\napp = FastAPI(title=\"Multi-Agent Dev Assistant\")\n# 应用启动时编译一次工作流，后续请求复用\nworkflow = build_workflow()\napp.include_router(dashboard_router)\n\n\nclass RunRequest(BaseModel):\n    # 任务唯一标识\n    task_id: str\n    # 用户自然语言需求\n    requirement: str\n    # 测试命令（默认使用 pytest）\n    test_command: str = \"pytest -q\"\n\n\n@app.get(\"/health\")\ndef health() -> dict:\n    \"\"\"\n    健康检查接口\n    \"\"\"\n    return {\"status\": \"ok\"}\n\n\n@app.post(\"/run\")\ndef run_task(req: RunRequest) -> dict:\n    \"\"\"\n    执行一次多 Agent 工作流\n    \"\"\"\n    # 组装初始状态，交给工作流逐节点处理\n    input_state = TaskState(\n        task_id=req.task_id,\n        requirement=req.requirement,\n        test_command=req.test_command,\n    )\n\n    # 执行完整流程：planner -> coder -> tester -> reviewer\n    output_state = workflow.invoke(input_state)\n\n    # output_state 可能是 TaskState 或 dict，统一转成 dict 返回\n    if hasattr(output_state, \"model_dump\"):\n        payload = output_state.model_dump()\n    else:\n        payload = output_state\n\n    # 转成可 JSON 序列化结构（兼容 Pydantic/Enum 等对象）\n    serializable_payload = jsonable_encoder(payload)\n\n    # 持久化最近一次运行结果，供 dashboard 展示流程轨迹\n    report_dir = Path(\"eval/reports\")\n    report_dir.mkdir(parents=True, exist_ok=True)\n    (report_dir / \"latest_run.json\").",
+    "[app/graph/workflow.py]\nfrom langgraph.graph import END, StateGraph\n\nfrom app.agents.coder import run_coder\nfrom app.agents.planner import run_planner\nfrom app.agents.reviewer import run_reviewer\nfrom app.agents.tester import run_tester\nfrom app.schemas.state import TaskState\nfrom app.telemetry.tracing import with_trace\n\n\ndef build_workflow():\n    \"\"\"\n    构建多 Agent 工作流：\n    planner -> coder -> tester -> reviewer -> END\n    \"\"\"\n    graph = StateGraph(TaskState)\n\n    # 注册节点\n    graph.add_node(\"planner\", with_trace(\"planner\", run_planner))\n    graph.add_node(\"coder\", with_trace(\"coder\", run_coder))\n    graph.add_node(\"tester\", with_trace(\"tester\", run_tester))\n    graph.add_node(\"reviewer\", with_trace(\"reviewer\", run_reviewer))\n\n    # 设置入口\n    graph.set_entry_point(\"planner\")\n\n    # 连线\n    graph.add_edge(\"planner\", \"coder\")\n    graph.add_edge(\"coder\", \"tester\")\n    graph.add_edge(\"tester\", \"reviewer\")\n    graph.add_edge(\"reviewer\", END)\n\n    return graph.compile()",
+    "[app/schemas/state.py]\nfrom typing import Any, Dict, List, Optional\n\nfrom pydantic import BaseModel, Field\n\nfrom app.schemas.actions import ActionPlan, PRDescription, ReviewFinding, TestReport\n\n\nclass TaskState(BaseModel):\n    # 当前任务唯一 ID\n    task_id: str\n    # 用户输入的原始需求\n    requirement: str\n\n    # RAG 或上下文检索得到的片段\n    context: List[str] = Field(default_factory=list)\n\n    # Planner 产出的结构化执行计划\n    plan: Optional[ActionPlan] = None\n\n    # Coder 产出的 patch 草案（后面会升级为可自动应用）\n    code_patch: Optional[str] = None\n\n    # Tester 要执行的命令（默认 pytest）\n    test_command: str = \"pytest -q\"\n    # Tester 产出的结构化报告\n    test_report: Optional[TestReport] = None\n\n    # Reviewer 产出的风险发现\n    review_findings: List[ReviewFinding] = Field(default_factory=list)\n\n    # 最终 PR 文案\n    pr_description: Optional[PRDescription] = None\n\n    # 运行追踪信息（后面用于 trace/metrics）\n    traces: List[Dict[str, Any]] = Field(default_factory=list)\n\n    # 记忆笔记（短期/长期记忆先预留字段）\n    memory_notes: List[str] = Field(default_factory=list)\n\n    # 执行过程中出现的错误\n    errors: List[str] = Field(default_factory=list)",
+    "[tests/test_health.py]\nfrom fastapi.testclient import TestClient\n\nfrom app.main import app\n\n\ndef test_health_endpoint_returns_ok() -> None:\n    \"\"\"健康检查接口应返回 200 和固定状态字段。\"\"\"\n    client = TestClient(app)\n    response = client.get(\"/health\")\n\n    assert response.status_code == 200\n    assert response.json() == {\"status\": \"ok\"}\n"
+  ],
+  "plan": {
+    "task_id": "demo-llm-ok",
+    "steps": [
+      {
+        "type": "propose_patch",
+        "reason": "Add health endpoint",
+        "params": {
+          "endpoint": "/health",
+          "method": "GET",
+          "response": "{\"status\": \"ok\"}"
+        }
+      },
+      {
+        "type": "propose_patch",
+        "reason": "Add API test",
+        "params": {
+          "test_command": "python -m pytest -q",
+          "test_file": "test_health_endpoint.py",
+          "test_content": "import pytest\nfrom fastapi.testclient import TestClient\nfrom app.main import app\n\nclient = TestClient(app)\n\ndef test_health_endpoint():\n    response = client.get('/health')\n    assert response.status_code == 200\n    assert response.json() == {'status': 'ok'}"
+        }
+      },
+      {
+        "type": "run_tests",
+        "reason": "Run API test",
+        "params": {
+          "test_command": "python -m pytest -q"
+        }
+      }
+    ],
+    "acceptance_criteria": [
+      "Health endpoint returns 200 status code",
+      "Health endpoint returns {'status': 'ok'} response",
+      "API test passes"
+    ]
+  },
+  "code_patch": "### Proposed Patch (LLM)\n- Summary: Add health endpoint and API test\n- File Changes:\n  - `app/main.py`: Add health endpoint (why: To provide a health check endpoint for the application)\n  - `test_health_endpoint.py`: Add API test for health endpoint (why: To ensure the health endpoint returns the expected response)\n- Tests:\n  - python -m pytest -q test_health_endpoint.py\n",
+  "test_command": "python -m pytest -q",
+  "test_report": {
+    "command": "python -m pytest -q",
+    "passed": true,
+    "exit_code": 0,
+    "output": ".                                                                        [100%]\n1 passed in 6.43s"
+  },
+  "review_findings": [
+    {
+      "title": "Manual review recommended",
+      "level": "medium",
+      "details": "Patch draft exists; please verify code style, edge cases, and compatibility.",
+      "suggestion": "Run lint checks and inspect changed files manually."
+    }
+  ],
+  "pr_description": {
+    "summary": "Auto-generated implementation for: Add health endpoint and add one API test",
+    "changes": [
+      "### Proposed Patch (LLM)\n- Summary: Add health endpoint and API test\n- File Changes:\n  - `app/main.py`: Add health endpoint (why: To provide a health check endpoint for the application)\n  - `test_health_endpoint.py`: Add API test for health endpoint (why: To ensure the health endpoint returns the expected response)\n- Tests:\n  - python -m pytest -q test_health_endpoint.py\n"
+    ],
+    "test_plan": [
+      "python -m pytest -q"
+    ],
+    "risks": [
+      "medium: Manual review recommended"
+    ]
+  },
+  "traces": [
+    {
+      "node": "planner",
+      "latency_ms": 69396.57,
+      "input_summary": {
+        "task_id": "demo-llm-ok",
+        "requirement": "Add health endpoint and add one API test",
+        "context_count": 0,
+        "error_count": 0
+      },
+      "output_summary": {
+        "planned_steps": 3,
+        "acceptance_criteria_count": 3
+      },
+      "new_errors": []
+    },
+    {
+      "node": "coder",
+      "latency_ms": 7309.5,
+      "input_summary": {
+        "task_id": "demo-llm-ok",
+        "requirement": "Add health endpoint and add one API test",
+        "context_count": 4,
+        "error_count": 0
+      },
+      "output_summary": {
+        "code_patch_preview": "### Proposed Patch (LLM)\n- Summary: Add health endpoint and API test\n- File Changes:\n  - `app/main.py`: Add health endpoint (why: To provide a health check endpoint for the appl..."
+      },
+      "new_errors": []
+    },
+    {
+      "node": "tester",
+      "latency_ms": 8867.28,
+      "input_summary": {
+        "task_id": "demo-llm-ok",
+        "requirement": "Add health endpoint and add one API test",
+        "context_count": 4,
+        "error_count": 0
+      },
+      "output_summary": {
+        "test_command": "python -m pytest -q",
+        "passed": true,
+        "exit_code": 0
+      },
+      "new_errors": []
+    },
+    {
+      "node": "reviewer",
+      "latency_ms": 0.04,
+      "input_summary": {
+        "task_id": "demo-llm-ok",
+        "requirement": "Add health endpoint and add one API test",
+        "context_count": 4,
+        "error_count": 0
+      },
+      "output_summary": {
+        "findings_count": 1,
+        "risk_levels": [
+          "medium"
+        ]
+      },
+      "new_errors": []
+    }
+  ],
+  "memory_notes": [],
+  "errors": []
+}

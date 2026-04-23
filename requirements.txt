@@ -10,3 +10,4 @@ pytest
 httpx
 langchain-openai
 python-dotenv
+pyyaml

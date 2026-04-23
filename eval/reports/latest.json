@@ -1,0 +1,18 @@
+{
+  "summary": {
+    "total_tasks": 1,
+    "success_rate": 1.0,
+    "test_pass_rate": 1.0,
+    "avg_latency_ms": 29450.65
+  },
+  "results": [
+    {
+      "task_id": "bench-001",
+      "status_code": 200,
+      "elapsed_ms": 29450.65,
+      "success": true,
+      "test_passed": true,
+      "errors": []
+    }
+  ]
+}
