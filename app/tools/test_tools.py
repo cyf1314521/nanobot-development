@@ -1,10 +1,14 @@
 import subprocess
 
+from app.config import settings
 
-def run_test_command(command: str, timeout_seconds: int = 30) -> dict:
+
+def run_test_command(command: str, timeout_seconds: int | None = None) -> dict:
     """
-    执行测试命令并返回结构化结果。
+    执行测试命令并返回结构化结果。未传 timeout 时使用 settings.tool_timeout_seconds。
     """
+    if timeout_seconds is None:
+        timeout_seconds = settings.tool_timeout_seconds
     try:
         # 调用子进程执行测试命令：
         # - shell=True: 允许直接传字符串命令（如 "pytest -q"）

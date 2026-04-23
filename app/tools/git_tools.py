@@ -1,18 +1,26 @@
 import subprocess
 from pathlib import Path
 
+from app.config import settings
 
 # Git 工具层统一异常，便于上层捕获并做错误分类
 class GitToolError(Exception):
     pass
 
 
-def _run_git(args: list[str], workspace_root: str, timeout_seconds: int = 30) -> str:
+def _run_git(
+    args: list[str],
+    workspace_root: str,
+    timeout_seconds: int | None = None,
+) -> str:
     """
     在指定仓库目录执行 git 子命令，并返回标准输出。
     例如：
     args=["diff"] -> 实际执行 git diff
+    未传 timeout 时使用 settings.tool_timeout_seconds。
     """
+    if timeout_seconds is None:
+        timeout_seconds = settings.tool_timeout_seconds
     result = subprocess.run(
         ["git", *args],            # 组装完整命令：git + 参数
         cwd=workspace_root,        # 指定仓库根目录执行

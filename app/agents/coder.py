@@ -1,5 +1,6 @@
 import json
 
+from app.config import settings
 from app.llm.client import get_llm
 from app.schemas.state import TaskState
 from app.tools.file_tools import FileToolError, read_file_safe, write_file_safe
@@ -89,7 +90,7 @@ def run_coder(state: TaskState) -> TaskState:
     if not should_apply:
         return state
 
-    workspace_root = "."
+    workspace_root = settings.workspace_root
     target_file = "tmp/demo.txt"
     backup_content = None
 
