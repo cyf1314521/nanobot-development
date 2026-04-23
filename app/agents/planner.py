@@ -3,6 +3,7 @@ import json
 from app.llm.client import get_llm
 from app.schemas.actions import ActionPlan, ActionType, AgentAction
 from app.schemas.state import TaskState
+from app.tools.retrieval_tools import retrieve_project_context
 
 
 def _fallback_plan(state: TaskState) -> ActionPlan:
@@ -40,6 +41,9 @@ def _fallback_plan(state: TaskState) -> ActionPlan:
 
 
 def run_planner(state: TaskState) -> TaskState:
+    # 第一步先收集项目上下文，供后续 Planner/Coder 参考
+    state.context = retrieve_project_context()
+
     # 优先尝试 LLM 生成动态计划
     llm = get_llm()
     if llm is None:
@@ -62,6 +66,7 @@ Task:
 - task_id: {state.task_id}
 - requirement: {state.requirement}
 - test_command: {state.test_command}
+- context_snippets: {state.context[:3]}
 """
     try:
         resp = llm.invoke(prompt)
